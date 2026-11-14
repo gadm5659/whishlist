@@ -306,8 +306,8 @@ function shareSheet(kind,id){
  <a class="btn wa wide" href="https://wa.me/?text=${encodeURIComponent(t)}" target="_blank" rel="noopener">Abrir WhatsApp con este mensaje</a>
  <button class="btn wide" data-act="copy">Copiar mensaje</button>${cancel('Cerrar')}`,'Compartir por WhatsApp')}
 function adminSheet(){
- sheet(`<h2>PIN del grupo</h2><p class="muted small">Si alguien olvidó su PIN, reinicialo y esa persona crea uno nuevo al entrar.</p>
- <div class="stack">${U.map(u=>`<div class="row between"><span>${esc(u.n)} <span class="muted small">· ${u.pin?'con PIN':'sin PIN'}</span></span>${u.pin&&u.id!==me?`<button class="btn" data-act="resetPin" data-id="${u.id}">Reiniciar</button>`:''}</div>`).join('')}</div>${cancel('Cerrar')}`,'Administrar PIN')}
+ sheet(`<h2>PIN del grupo</h2><p class="muted small">El botón «Reiniciar» aparece solo en quienes ya crearon su PIN. Al reiniciarlo, esa persona crea uno nuevo la próxima vez que entra.</p>
+ <div class="stack">${U.map(u=>`<div class="row between"><span>${esc(u.n)} <span class="muted small">· ${u.pin?'con PIN':'sin PIN'}</span></span>${u.pin?`<button class="btn" data-act="resetPin" data-id="${u.id}">${u.id===me?'Cambiar mi PIN':'Reiniciar'}</button>`:''}</div>`).join('')}</div>${cancel('Cerrar')}`,'Administrar PIN')}
 
 function toThumb(file){return new Promise((res,rej)=>{const url=URL.createObjectURL(file),im=new Image();
  im.onload=()=>{const k=Math.min(1,240/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);
@@ -341,7 +341,8 @@ document.addEventListener('click',async ev=>{
   if(a==='admin'){adminSheet();return}
   if(a==='share'){shareSheet(el.dataset.kind,id);return}
   if(a==='copy'){try{await navigator.clipboard.writeText($('#msg').textContent);toast('Mensaje copiado.')}catch(e){toast('No se pudo copiar. Mantené apretado el texto para copiarlo.')}return}
-  if(a==='resetPin'){if(me!==ADMIN)return;await updateDoc(doc(db,'users',id),{pin:deleteField()});closeSheet();toast('PIN reiniciado.');return}
+  if(a==='resetPin'){if(me!==ADMIN)return;await updateDoc(doc(db,'users',id),{pin:deleteField()});closeSheet();
+   if(id===me){me='';try{localStorage.removeItem('wl_me')}catch(e){}view={v:'home'};render(true);toast('Elegí tu nombre y creá tu PIN nuevo.')}else toast('PIN de '+user(id).n+' reiniciado.');return}
   if(a==='delEvent'){if(me!==ADMIN)return;await deleteDoc(doc(db,'events',id));view={v:'home'};render(true);toast('Evento eliminado.');return}
   if(!it)return;
   if(a==='claim'){claimSheet(it);return}
