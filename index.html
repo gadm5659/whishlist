@@ -170,8 +170,8 @@ function evCard(e){const p=dparts(e.date);const sub=e.type==='cumple'?'Cumpleañ
 
 function home(){
  const evs=allEvents(),shown=showAll?evs:evs.slice(0,4);
- const ppl=U.map(u=>{const l=listOf(u.id);const free=l.filter(i=>!i.claim).length;
-  const sub=u.id===me?`${l.length} deseos en tu lista`:`${free} de ${l.length} sin regalar`;
+ const ppl=U.slice().sort((a,b)=>nextMD(a.b)<nextMD(b.b)?-1:1).map(u=>{const l=listOf(u.id);const free=l.filter(i=>!i.claim).length;const bp=dparts(nextMD(u.b));
+  const sub=`Cumple ${bp.d} ${bp.m} · `+(u.id===me?`${l.length} deseos`:`${free} de ${l.length} sin regalar`);
   return `<button class="card person" data-act="list" data-id="${u.id}"><span class="row">${av(u.id)}<h2>${u.id===me?'Mi lista':esc(u.n)}</h2></span><span class="muted small">${sub}</span></button>`}).join('');
  return `<div class="stack"><h1>Hola, ${esc(user(me).n)}</h1><p class="muted">Grupo «${esc(GROUP)}» · ${U.length} personas</p></div>
  <section class="stack"><h2>Próximos eventos</h2>${shown.map(evCard).join('')}${evs.length>4?`<button class="btn wide" data-act="toggleAll">${showAll?'Ver menos':'Ver los '+evs.length+' eventos'}</button>`:''}<button class="btn wide" data-act="addEvent">Agregar un evento</button></section>
@@ -210,7 +210,8 @@ function list(id){
  const gv=ng?`<div class="note"><b>Ya te regalaron ${ng} ${ng===1?'deseo':'deseos'} de tu lista.</b>Están marcados abajo. Quitalos cuando quieras.</div>`:'';
  const add=own?`<button class="btn pri wide" data-act="add">Agregar un deseo</button>`:'';
  const body=l.length?l.map(i=>itemHTML(i,own)).join(''):`<p class="muted">${own?'Tu lista está vacía. Agregá tu primer deseo.':esc(u.n)+' todavía no cargó deseos.'}</p>`;
- const share=own?`<button class="btn wide" data-act="share" data-kind="list">Compartir mi lista por WhatsApp</button>`:'';
+ const share=!l.length?'':own?`<button class="btn wide" data-act="share" data-kind="list">Compartir mi lista con el grupo</button><button class="btn wide" data-act="share" data-kind="text" data-id="${id}">Enviar mi lista a alguien de afuera</button>`
+  :`<button class="btn wide" data-act="share" data-kind="avail" data-id="${id}">Enviar lo disponible a alguien de afuera</button>`;
  return `${view.from?'<button class="back" data-act="back">‹ Volver</button>':''}${head}${info}${gv}${add}<div class="stack">${body}</div>${share}`}
 
 function gifts(){
@@ -293,6 +294,12 @@ function claimSheet(it){
 function shareSheet(kind,id){
  const link=location.href.split('#')[0].split('?')[0];let t;
  if(kind==='list')t=`Les paso mi lista de deseos, por si no saben qué regalarme:\n${link}\nMarquen lo que compren, que yo no lo veo.`;
+ else if(kind==='text'||kind==='avail'){
+  const own=kind==='text',src=listOf(id).filter(i=>own||!i.claim);
+  const lines=src.map(i=>'• '+i.name+(i.sized&&i.size?' (talle '+i.size+')':'')+(i.note?' — '+i.note:'')+(safeUrl(i.url)?'\n'+i.url:'')).join('\n\n');
+  t=own?`Mi lista de deseos:\n\n${lines}`
+   :src.length?`Lista de deseos de ${user(id).n}. Esto es lo que todavía nadie reservó:\n\n${lines}\n\nSi vas a regalar algo, avisame así lo marco y no se repite.`
+   :`Por ahora todo lo de la lista de ${user(id).n} ya está reservado.`}
  else if(kind==='event'){const e=allEvents().find(x=>x.id===id);const p=dparts(e.date);t=`${e.name}, el ${p.d} de ${p.m}.\nMiren las listas y marquen qué regala cada uno:\n${link}`}
  else t=`Armé las listas de deseos del grupo. Cada uno carga lo que quiere y el resto marca qué regala, sin que el dueño se entere:\n${link}\nEntren con su nombre y creen su PIN.`;
  sheet(`<h2>Compartir por WhatsApp</h2><pre class="msg" id="msg">${esc(t)}</pre>
