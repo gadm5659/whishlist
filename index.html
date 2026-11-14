@@ -101,7 +101,7 @@ pre.msg{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--body);back
 <div id="overlay"></div>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-import {getFirestore,collection,doc,getDoc,addDoc,updateDoc,deleteDoc,onSnapshot,writeBatch,runTransaction,arrayUnion,deleteField} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import {getFirestore,collection,doc,getDoc,addDoc,updateDoc,deleteDoc,onSnapshot,writeBatch,runTransaction,arrayUnion,arrayRemove,deleteField} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const firebaseConfig={
   apiKey:"AIzaSyDNWVHa62waTsZ1EQ6zbH1D09OORzeKQ0E",
@@ -136,7 +136,7 @@ const SEED_ITEMS=[
 
 let U=[],items=[],custom=[],ready={u:false,i:false,e:false},err='';
 let me='';try{me=localStorage.getItem('wl_me')||''}catch(e){}
-let view={v:'home'},photo='',showAll=false,sizedTouched=false,sizeFor=null,pinFor=null;
+let view={v:'home'},photo='',showAll=false,sizedTouched=false,sizeFor=null,pinFor=null,editFor=null;
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -155,6 +155,7 @@ function nextMD(b){const [d,m]=String(b).split('/').map(Number);const t=today();
 function allEvents(){
  const c=custom.map(e=>e.yearly&&e.md?{...e,date:nextMD(e.md)}:e).filter(e=>e.date&&daysTo(e.date)>=0);
  return c.concat(U.map(u=>({id:'b-'+u.id,name:'Cumple de '+u.n,date:nextMD(u.b),type:'cumple',who:u.id}))).sort((a,b)=>a.date<b.date?-1:1)}
+function alerts(){return items.filter(i=>i.claim&&(i.claim.pool?(i.claim.members||[]).includes(me):i.claim.by===me)&&(i.removed||(i.chg||[]).includes(me))).length}
 function isRev(i){return !!(i.claim&&i.claim.st==='done'&&i.claim.evDate&&daysTo(i.claim.evDate)<0)}
 function toast(t){const o=document.querySelector('.toast');if(o)o.remove();const e=document.createElement('div');e.className='toast';e.setAttribute('role','status');e.textContent=t;document.body.appendChild(e);setTimeout(()=>e.remove(),3000)}
 async function sha(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('')}
@@ -169,11 +170,12 @@ function evCard(e){const p=dparts(e.date);const sub=e.type==='cumple'?'Cumpleañ
  return `<button class="card" data-act="event" data-id="${esc(e.id)}"><span class="date"><b>${p.d}</b><span>${p.m}</span></span><span class="grow"><h2>${esc(e.name)}</h2><span class="muted small">${sub} · ${when(e.date)}</span></span></button>`}
 
 function home(){
- const evs=allEvents(),shown=showAll?evs:evs.slice(0,4);
+ const evs=allEvents(),shown=showAll?evs:evs.slice(0,4),na=alerts();
  const ppl=U.slice().sort((a,b)=>nextMD(a.b)<nextMD(b.b)?-1:1).map(u=>{const l=listOf(u.id);const free=l.filter(i=>!i.claim).length;const bp=dparts(nextMD(u.b));
   const sub=`Cumple ${bp.d} ${bp.m} · `+(u.id===me?`${l.length} deseos`:`${free} de ${l.length} sin regalar`);
   return `<button class="card person" data-act="list" data-id="${u.id}"><span class="row">${av(u.id)}<h2>${u.id===me?'Mi lista':esc(u.n)}</h2></span><span class="muted small">${sub}</span></button>`}).join('');
  return `<div class="stack"><h1>Hola, ${esc(user(me).n)}</h1><p class="muted">Grupo «${esc(GROUP)}» · ${U.length} personas</p></div>
+ ${na?`<button class="card" data-act="go" data-v="gifts"><span class="grow"><b class="warnt">${na===1?'Hubo un cambio en un regalo que reservaste.':'Hubo cambios en '+na+' regalos que reservaste.'}</b><br><span class="muted small">Tocá para revisarlo en Mis regalos.</span></span></button>`:''}
  <section class="stack"><h2>Próximos eventos</h2>${shown.map(evCard).join('')}${evs.length>4?`<button class="btn wide" data-act="toggleAll">${showAll?'Ver menos':'Ver los '+evs.length+' eventos'}</button>`:''}<button class="btn wide" data-act="addEvent">Agregar un evento</button></section>
  <section class="stack"><h2>Listas del grupo</h2><div class="people">${ppl}</div></section>
  <button class="btn wide" data-act="share" data-kind="group">Invitar al grupo por WhatsApp</button>
@@ -183,8 +185,8 @@ function itemHTML(i,own){
  const u=safeUrl(i.url),img=safeImg(i.img);
  const sz=i.sized?(i.size?`<span class="sz">Talle: ${esc(i.size)}</span>`:`<span class="warnt">Falta el talle</span>`):'';
  const th=img?`<img src="${img}" alt="">`:esc((i.name||'?').trim()[0]||'?');
- let status='',acts='';
- if(own){acts=(i.sized&&!i.size?`<button class="btn pri" data-act="size" data-id="${i.id}">Cargar talle</button>`:'')+`<button class="btn" data-act="del" data-id="${i.id}">Quitar</button>`;if(isRev(i))status='<span class="pill free">Alguien te lo regaló</span>'}
+ let status='',acts='',warn='';
+ if(own){acts=`<button class="btn" data-act="edit" data-id="${i.id}">Editar</button>`+(i.sized&&!i.size?`<button class="btn pri" data-act="size" data-id="${i.id}">Cargar talle</button>`:'')+`<button class="btn" data-act="del" data-id="${i.id}">Quitar</button>`;if(isRev(i))status='<span class="pill free">Alguien te lo regaló</span>'}
  else if(!i.claim){status='<span class="pill free">Disponible</span>';acts=`<button class="btn pri" data-act="claim" data-id="${i.id}">Lo regalo yo</button>`}
  else{const c=i.claim,st=c.st,ms=c.members||[],mineC=c.pool?ms.includes(me):c.by===me;
   const who=c.pool?ms.map(m=>m===me?'vos':esc(user(m).n)).join(', '):(c.by===me?'vos':c.anon?'':esc(user(c.by).n));
@@ -193,12 +195,13 @@ function itemHTML(i,own){
   if(mineC){
    if(st==='res')acts=`<button class="btn pri" data-act="bought" data-id="${i.id}">${c.pool?'Ya lo compramos':'Ya lo compré'}</button>`;
    acts+=`<button class="btn" data-act="release" data-id="${i.id}">${c.pool?'Salir de la vaquita':'Liberar'}</button>`;
+   if((i.chg||[]).includes(me)){warn=`<p class="small warnt" style="margin-top:6px">${esc(user(i.owner).n)} modificó este deseo después de tu reserva. Revisá los datos antes de comprar.</p>`;acts+=`<button class="btn" data-act="ack" data-id="${i.id}">Entendido</button>`}
   }else if(c.pool&&st==='res')acts=`<button class="btn pri" data-act="join" data-id="${i.id}">Sumarme a la vaquita</button>`}
  return `<article class="card item"><div class="thumb">${th}</div><div class="grow">
   <h3>${esc(i.name)}</h3>
   <div class="row small" style="flex-wrap:wrap;margin-top:4px">${sz}${u?`<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">Ver link</a>`:''}${status}</div>
   ${i.note?`<p class="muted small" style="margin-top:4px">${esc(i.note)}</p>`:''}
-  <div class="acts">${acts}</div></div></article>`}
+  ${warn}<div class="acts">${acts}</div></div></article>`}
 
 function list(id){
  const own=id===me,u=user(id),l=listOf(id);
@@ -246,6 +249,7 @@ function render(nav){
  const top=m.scrollTop;m.innerHTML=h;m.scrollTop=nav?0:top;
  const on=logged&&!err;$('#tabs').hidden=!on;$('#bar').hidden=!on;
  if(on)$('#who').textContent='Entraste como '+user(me).n;
+ const nal=on?alerts():0,gt=document.querySelector('#tabs button[data-v="gifts"]');if(gt)gt.textContent='Mis regalos'+(nal?' ('+nal+')':'');
  const tab=view.v==='list'&&view.id===me?'mine':view.v;
  document.querySelectorAll('#tabs button').forEach(b=>{if(b.dataset.v===tab)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')})}
 
@@ -259,16 +263,16 @@ function pinSheet(u){pinFor=u;const first=!u.pin;
  <label class="field" for="p-pin">PIN<input id="p-pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required autocomplete="off" placeholder="4 números"></label>
  <button class="btn pri wide" type="submit">${first?'Guardar PIN y entrar':'Entrar'}</button>
  ${first?'':`<p class="muted small">¿Lo olvidaste? Pedile a ${esc(user(ADMIN).n)} que lo reinicie.</p>`}${cancel()}`,'Ingresar','pinForm');$('#p-pin').focus()}
-function addSheet(){
- sheet(`<h2>Agregar un deseo</h2>
- <label class="field" for="f-name">¿Qué querés?<input id="f-name" required maxlength="80" placeholder="Ej.: Zapatillas para correr"></label>
- <label class="field" for="f-url">Link (opcional)<input id="f-url" inputmode="url" maxlength="600" placeholder="Pegá el link de la tienda"></label>
- <label class="row" for="f-sized" style="font-weight:600;font-size:.88rem"><input id="f-sized" type="checkbox"> Es ropa, calzado o algo con talle</label>
- <label class="field" for="f-size" id="f-size-wrap" hidden>Talle o medidas (obligatorio)<input id="f-size" maxlength="40" placeholder="Ej.: 37, M, 90 x 60 cm"></label>
- <label class="field" for="f-note">Nota (opcional)<input id="f-note" maxlength="160" placeholder="Color, modelo, aclaraciones"></label>
- <label class="field" for="f-img">Foto (opcional)<input id="f-img" type="file" accept="image/*"></label>
- <button class="btn pri wide" type="submit">Guardar en mi lista</button>${cancel()}`,'Agregar un deseo','addForm');
- sizedTouched=false;$('#f-name').focus()}
+function addSheet(it){editFor=it||null;const v=k=>it?esc(it[k]||''):'';
+ sheet(`<h2>${it?'Editar deseo':'Agregar un deseo'}</h2>
+ <label class="field" for="f-name">¿Qué querés?<input id="f-name" required maxlength="80" value="${v('name')}" placeholder="Ej.: Zapatillas para correr"></label>
+ <label class="field" for="f-url">Link (opcional)<input id="f-url" inputmode="url" maxlength="600" value="${v('url')}" placeholder="Pegá el link de la tienda"></label>
+ <label class="row" for="f-sized" style="font-weight:600;font-size:.88rem"><input id="f-sized" type="checkbox"${it&&it.sized?' checked':''}> Es ropa, calzado o algo con talle</label>
+ <label class="field" for="f-size" id="f-size-wrap" hidden>Talle o medidas (obligatorio)<input id="f-size" maxlength="40" value="${v('size')}" placeholder="Ej.: 37, M, 90 x 60 cm"></label>
+ <label class="field" for="f-note">Nota (opcional)<input id="f-note" maxlength="160" value="${v('note')}" placeholder="Color, modelo, aclaraciones"></label>
+ <label class="field" for="f-img">${it&&safeImg(it.img)?'Cambiar la foto (opcional)':'Foto (opcional)'}<input id="f-img" type="file" accept="image/*"></label>
+ <button class="btn pri wide" type="submit">${it?'Guardar cambios':'Guardar en mi lista'}</button>${cancel()}`,it?'Editar deseo':'Agregar un deseo','addForm');
+ sizedTouched=!!it;syncSize();$('#f-name').focus()}
 function evSheet(){
  sheet(`<h2>Agregar un evento</h2>
  <label class="field" for="e-name">Nombre<input id="e-name" required maxlength="60" placeholder="Ej.: Despedida de Luis, Día del amigo"></label>
@@ -352,10 +356,12 @@ document.addEventListener('click',async ev=>{
   if(a==='join'){if(it.claim&&it.claim.pool){await updateDoc(ref(id),{'claim.members':arrayUnion(me)});toast('Te sumaste a la vaquita.')}return}
   if(a==='bought'){await updateDoc(ref(id),{'claim.st':'done'});toast('Marcado como comprado.');return}
   if(a==='release'){const c=it.claim;if(!c)return;
-   const drop=async()=>{if(it.removed)await deleteDoc(ref(id));else await updateDoc(ref(id),{claim:null});toast('Liberado para el resto del grupo.')};
-   if(c.pool){const ms=(c.members||[]).filter(m=>m!==me);if(ms.length){await updateDoc(ref(id),{'claim.members':ms,'claim.by':ms[0]});toast('Saliste de la vaquita.')}else await drop()}
+   const drop=async()=>{if(it.removed)await deleteDoc(ref(id));else await updateDoc(ref(id),{claim:null,chg:[]});toast('Liberado para el resto del grupo.')};
+   if(c.pool){const ms=(c.members||[]).filter(m=>m!==me);if(ms.length){await updateDoc(ref(id),{'claim.members':ms,'claim.by':ms[0],chg:arrayRemove(me)});toast('Saliste de la vaquita.')}else await drop()}
    else if(c.by===me)await drop();return}
   if(a==='size'){if(it.owner===me)sizeSheet(it);return}
+  if(a==='edit'){if(it.owner===me)addSheet(it);return}
+  if(a==='ack'){await updateDoc(ref(id),{chg:arrayRemove(me)});return}
   if(a==='del'){if(it.owner!==me)return;if(it.claim&&!isRev(it))await updateDoc(ref(id),{removed:true});else await deleteDoc(ref(id));toast('Quitado de tu lista.');return}
  }catch(e){console.error(e);toast('No se pudo guardar. Revisá tu conexión e intentá de nuevo.')}});
 
@@ -375,7 +381,12 @@ document.addEventListener('submit',async ev=>{
   if(f==='addForm'){const name=$('#f-name').value.trim();if(!name)return;
    let url=$('#f-url').value.trim();if(url&&!/^https?:\/\//i.test(url))url='https://'+url;
    const sized=$('#f-sized').checked,size=sized?$('#f-size').value.trim():'';if(sized&&!size){toast('Cargá el talle o las medidas.');return}
-   const img=photo,note=$('#f-note').value.trim();closeSheet();
+   const img=photo,note=$('#f-note').value.trim(),ed=editFor;closeSheet();
+   if(ed){const cur=items.find(i=>i.id===ed.id);if(!cur||cur.owner!==me)return;
+    const up={name,url,note,sized,size};if(img)up.img=img;
+    const changed=!!img||name!==cur.name||url!==(cur.url||'')||note!==(cur.note||'')||size!==(cur.size||'')||sized!==!!cur.sized;
+    const c=cur.claim;if(changed&&c&&!isRev(cur))up.chg=c.pool?(c.members||[]):[c.by];
+    await updateDoc(ref(ed.id),up);toast('Cambios guardados.');return}
    await addDoc(collection(db,'items'),{owner:me,name,url,note,sized,size,img,claim:null,removed:false,ts:Date.now()});
    view={v:'mine'};render(true);toast('Agregado a tu lista.');return}
   if(f==='evForm'){const name=$('#e-name').value.trim(),date=$('#e-date').value,who=$('#e-who').value,yearly=$('#e-year').checked;if(!name||!date)return;
